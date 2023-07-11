@@ -110,8 +110,8 @@ jobs:
     - name: Package builds
       run: |
         cd signed-builds
-        zip -r -j ../opus-${{ steps.version.outputs.current }}-windows-i686.zip opus-windows-i686
-        zip -r -j ../opus-${{ steps.version.outputs.current }}-windows-x86_64.zip opus-windows-x86_64
+        zip -r ../opus-${{ steps.version.outputs.current }}-windows-i686.zip opus-windows-i686
+        zip -r ../opus-${{ steps.version.outputs.current }}-windows-x86_64.zip opus-windows-x86_64
     - name: Create GitHub release with packages
       uses: softprops/action-gh-release@v1
       with:
