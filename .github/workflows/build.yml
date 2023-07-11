@@ -1,0 +1,121 @@
+name: Build
+on:
+  push:
+    tags:        
+      - '*'
+jobs:
+  build-windows-i686:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ./opus
+    steps:
+    - name: Clone opus submodule
+      uses: actions/checkout@v3
+      with:
+        submodules: true
+    - name: Install compiler tools
+      run: |
+        sudo apt update
+        sudo apt install mingw-w64 mingw-w64-tools
+    - name: Configure source
+      run: |
+        mkdir _build
+        ./autogen.sh
+        ./configure --host=mingw32 --prefix=$(pwd)/_build
+    - name: Compile source
+      run: make
+    - name: Copy build
+      run: make install
+    - name: Upload build as artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: opus-windows-i686
+        path: opus/_build
+  build-windows-x86_64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ./libvpx
+    steps:
+    - name: Clone libvpx submodule
+      uses: actions/checkout@v3
+      with:
+        submodules: true
+    - name: Install compiler tools
+      run: |
+        sudo apt update
+        sudo apt install mingw-w64 mingw-w64-tools yasm
+    - name: Configure source
+      run: |
+        mkdir _build
+        ./autogen.sh
+        ./configure --host=mingw64 --prefix=$(pwd)/_build
+    - name: Compile source
+      run: make
+    - name: Copy build
+      run: make install
+    - name: Upload build as artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: opus-windows-x86_64
+        path: opus/_build
+  sign-builds:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    needs: [build-windows-i686, build-windows-x86_64]
+    steps:
+    - name: Download all builds
+      uses: actions/download-artifact@v3
+    - name: Setup dotnet
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 3.1.x
+    - name: Install AzureSignTool
+      run: dotnet tool install --global AzureSignTool
+    - name: Sign Files
+      run: |
+        Get-ChildItem -recurse -Include **.exe, **.dll | ForEach-Object {
+          $filePath = $_.FullName
+          & AzureSignTool sign -kvu "${{ secrets.AZURE_CERT_KEY_VAULT }}" -kvi "${{ secrets.AZURE_CLIENT_ID }}" -kvs "${{ secrets.AZURE_CLIENT_SECRET }}" -kvc "${{ secrets.AZURE_CODE_SIGNING_CERT }}" -kvt "${{ secrets.AZURE_TENANT_ID }}" -tr http://timestamp.digicert.com -v $filePath
+        }
+    - name: Upload build as artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: signed-builds
+        path: |
+          opus-windows-x86_64
+          opus-windows-i686
+  create-package:
+    permissions:
+      contents: write
+    needs: [build-windows-i686, build-windows-x86_64, sign-builds]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - name: Clone build repo
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    - name: Get current version
+      id: version
+      run: echo "current=$(git describe --tags)" >> "$GITHUB_OUTPUT"
+    - name: Download builds
+      uses: actions/download-artifact@v3
+      with:
+        name: signed-builds
+        path: signed-builds
+    - name: Package builds
+      run: |
+        cd signed-builds
+        zip -r -j ../opus-${{ steps.version.outputs.current }}-windows-i686.zip opus-windows-i686
+        zip -r -j ../opus-${{ steps.version.outputs.current }}-windows-x86_64.zip opus-windows-x86_64
+    - name: Create GitHub release with packages
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.current }}
+        files: |
+          opus-${{ steps.version.outputs.current }}-windows-i686.zip
+          opus-${{ steps.version.outputs.current }}-windows-x86_64.zip
