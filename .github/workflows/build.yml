@@ -23,7 +23,7 @@ jobs:
       run: |
         mkdir _build
         ./autogen.sh
-        ./configure --host=i686-w64-mingw32 --prefix=$(pwd)/_build
+        LDFLAGS="-lssp" ./configure --host=i686-w64-mingw32 --prefix=$(pwd)/_build
     - name: Compile source
       run: make
     - name: Copy build
@@ -52,7 +52,7 @@ jobs:
       run: |
         mkdir _build
         ./autogen.sh
-        ./configure --host=x86_64-w64-mingw32 --prefix=$(pwd)/_build
+        LDFLAGS="-lssp" ./configure --host=x86_64-w64-mingw32 --prefix=$(pwd)/_build
     - name: Compile source
       run: make
     - name: Copy build
